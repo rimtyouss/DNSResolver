@@ -1,0 +1,164 @@
+"""
+Module: test_locate_answer
+
+PyTest unit tests for the locate_answer function, based on the scenarios
+given in the project specifications document.
+"""
+import pytest
+from unittest.mock import patch, Mock, call
+import socket
+import pickle
+
+import resolver
+
+def get_parsed_response_from_file(name: str) -> bytes:
+    with open(name, "rb") as data_file:
+        return pickle.load(data_file)
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario1(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario1.parsed.bin")
+    answer = resolver.locate_answer("www.sandiego.edu", False, parsed_response)
+    assert answer == "192.195.155.200"
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario2(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario2.parsed.bin")
+    answer = resolver.locate_answer("evil.sandiego.edu", False, parsed_response)
+    assert answer is None
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario3(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "7.4.2.9"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario3.parsed.bin")
+    answer = resolver.locate_answer("ns-1509.awsdns-60.org", False, parsed_response)
+    assert answer == "7.4.2.9"
+
+    mock_resolve.assert_called_once_with("ns-1509.awsdns-60.org",
+                                         ['205.251.192.188', '205.251.196.63', '205.251.194.254', '205.251.198.124'],
+                                         False)
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.get_root_servers')
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario4(mock_resolve, mock_query_servers, mock_get_root_servers):
+
+    def fake_answer(n, s, mx=False):
+        return "5.5.5.5" if n == "consumerreports.org" else "1.1.1.1"
+
+    mock_resolve.side_effect = fake_answer
+    mock_query_servers.return_value = None
+    mock_get_root_servers.return_value = ['2.2.2.2', '3.3.3.3']
+
+    parsed_response = get_parsed_response_from_file("test/scenario4.parsed.bin")
+    answer = resolver.locate_answer("consumerreports.org", False, parsed_response)
+    assert answer == "5.5.5.5"
+
+    # check that last call was for consummerreports.org to the NS servers
+    pos_args, _ = mock_resolve.call_args
+    assert pos_args[0] == "consumerreports.org"
+    assert '1.1.1.1' in pos_args[1]
+    assert pos_args[2] == False
+
+    # check that first call was for the first NS name using the root servers
+    pos_args, _ = mock_resolve.call_args_list[0]
+    assert pos_args[0] == "ns2.p201.dns.oraclecloud.net"
+    assert pos_args[1] == ['2.2.2.2', '3.3.3.3']
+    if len(pos_args) == 3:
+        assert pos_args[2] == False
+
+    mock_query_servers.assert_not_called()
+
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario5(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario5.parsed.bin")
+    answer = resolver.locate_answer("gmail.com", True, parsed_response)
+    assert answer == "alt3.gmail-smtp-in.l.google.com"
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario6(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario6.parsed.bin")
+    answer = resolver.locate_answer("www.campuswire.com", False, parsed_response)
+    assert answer == "35.241.17.106"
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.get_root_servers')
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario7(mock_resolve, mock_query_servers, mock_get_root_servers):
+    mock_resolve.return_value = "19.1.55.7"
+    mock_query_servers.return_value = None
+    mock_get_root_servers.return_value = ['2.2.2.2', '3.3.3.3']
+
+    parsed_response = get_parsed_response_from_file("test/scenario7.parsed.bin")
+    answer = resolver.locate_answer("en.wikipedia.org", False, parsed_response)
+    assert answer == "19.1.55.7"
+
+    # check that there was a single call to resolve, with the correct
+    # parameters
+    mock_resolve.assert_called_once()
+    assert mock_resolve.call_args == call("dyna.wikimedia.org", ['2.2.2.2', '3.3.3.3']) \
+            or mock_resolve.call_args == call("dyna.wikimedia.org", ['2.2.2.2', '3.3.3.3'], False)
+
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario8(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario8.parsed.bin")
+    answer = resolver.locate_answer("amazon.com", False, parsed_response)
+    assert answer == "52.94.236.248"
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+@patch('resolver.query_servers')
+@patch('resolver.resolve')
+def test_scenario9(mock_resolve, mock_query_servers):
+    mock_resolve.return_value = "1.1.1.1"
+    mock_query_servers.return_value = None
+
+    parsed_response = get_parsed_response_from_file("test/scenario9.parsed.bin")
+    answer = resolver.locate_answer("www.sandiego.edu", True, parsed_response)
+    assert answer is None
+
+    mock_resolve.assert_not_called()
+    mock_query_servers.assert_not_called()
+
+if __name__ == "__main__":
+    pytest.main(['test_locate_answer.py', '-v'])
